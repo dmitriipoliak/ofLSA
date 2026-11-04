@@ -1,0 +1,53 @@
+# ofLSA environment
+# Source AFTER the OpenFOAM-14 environment:
+#     source /opt/openfoam14/etc/bashrc     (or your module / container)
+#     source <repo>/etc/bashrc
+#
+# Locates ARPACK/PARPACK in this order:
+#   1. ARPACK_DIR already set by the user (e.g. a cluster module or Spack)
+#   2. local build from scripts/install_arpack.sh ($HOME/software/arpack-ng-install)
+#   3. system packages (Debian/Ubuntu: libarpack2-dev libparpack2-dev)
+
+if [ -z "$WM_PROJECT_VERSION" ]; then
+    echo "ofLSA: OpenFOAM environment not loaded. Source OpenFOAM-14 etc/bashrc first." 1>&2
+    return 1 2>/dev/null || exit 1
+fi
+
+export OFLSA_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+_oflsa_find_libdir()
+{
+    for d in "$1/lib64" "$1/lib" "$1/lib/x86_64-linux-gnu"; do
+        if ls "$d"/libparpack.* >/dev/null 2>&1; then echo "$d"; return 0; fi
+    done
+    return 1
+}
+
+if [ -z "$ARPACK_DIR" ]; then
+    if [ -d "$HOME/software/arpack-ng-install" ]; then
+        export ARPACK_DIR="$HOME/software/arpack-ng-install"
+    elif [ -f /usr/include/arpack/parpack.h ]; then
+        export ARPACK_DIR=/usr
+    fi
+fi
+
+if [ -n "$ARPACK_DIR" ]; then
+    export ARPACK_LIB="$(_oflsa_find_libdir "$ARPACK_DIR")"
+    if [ -d "$ARPACK_DIR/include/arpack" ]; then
+        export ARPACK_INC="$ARPACK_DIR/include/arpack"
+    else
+        export ARPACK_INC="$ARPACK_DIR/include"
+    fi
+fi
+
+if [ -z "$ARPACK_LIB" ]; then
+    echo "ofLSA: PARPACK not found. Run scripts/install_arpack.sh or set ARPACK_DIR." 1>&2
+else
+    # runtime lookup for a non-system ARPACK
+    case ":$LD_LIBRARY_PATH:" in
+        *":$ARPACK_LIB:"*) ;;
+        *) export LD_LIBRARY_PATH="$ARPACK_LIB${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}" ;;
+    esac
+fi
+
+unset -f _oflsa_find_libdir

@@ -1,0 +1,13 @@
+EXE_INC = \
+    -DOMPI_SKIP_MPICXX \
+    -I$(MPI_ARCH_PATH)/include \
+    -I$(LIB_SRC)/OpenFOAM/lnInclude \
+    -I$(LIB_SRC)/finiteVolume/lnInclude \
+    -I$(LIB_SRC)/meshTools/lnInclude
+
+LIB_LIBS = \
+    -L$(MPI_ARCH_PATH)/lib \
+    -lmpi \
+    -lOpenFOAM \
+    -lfiniteVolume \
+    -lmeshTools

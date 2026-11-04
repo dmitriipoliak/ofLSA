@@ -1,0 +1,41 @@
+name: build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install OpenFOAM-14 and PARPACK
+        run: |
+          sudo sh -c "wget -qO /etc/apt/trusted.gpg.d/openfoam.asc https://dl.openfoam.org/gpg.key"
+          echo "deb http://dl.openfoam.org/ubuntu noble main" | sudo tee /etc/apt/sources.list.d/openfoam.list
+          sudo apt-get update
+          sudo apt-get install -y openfoam14 libarpack2-dev libparpack2-dev gfortran
+
+      - name: Build
+        shell: bash
+        run: |
+          . /opt/openfoam14/etc/bashrc || true
+          . etc/bashrc
+          ./Allwmake -j
+
+      # Full stability run is too long for a CI runner: check that both
+      # solvers start and the Newton base flow converges.
+      - name: Smoke test (Newton base flow)
+        shell: bash
+        timeout-minutes: 60
+        run: |
+          . /opt/openfoam14/etc/bashrc || true
+          . etc/bashrc
+          cd tutorials/lidDrivenCavity3D
+          foamDictionary system/decomposeParDict -entry numberOfSubdomains -set 2
+          blockMesh > log.blockMesh
+          decomposePar -force > log.decomposePar
+          mpirun -np 2 --oversubscribe NewtonSolver -parallel | tee log.NewtonSolver
+          grep -q "^End" log.NewtonSolver
+          StabilitySolver -help > /dev/null

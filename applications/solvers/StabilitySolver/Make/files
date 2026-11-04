@@ -1,0 +1,6 @@
+DoubledRealFGMRES.C
+ShiftedMALSolver.C
+ArpackShiftInvertSolver.C
+StabilitySolver.C
+
+EXE = $(FOAM_USER_APPBIN)/StabilitySolver

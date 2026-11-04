@@ -1,0 +1,26 @@
+#!/bin/bash
+# Open a clean shell with OpenFOAM-14 and ofLSA loaded.
+#
+# Works around two problems seen on Ubuntu 26.04 desktops:
+#  - sourcing OpenFOAM's bashrc twice in one shell breaks it (_foamSource: command not found)
+#  - sourcing hangs because a ParaView version check waits on the terminal
+#
+# Usage:  scripts/oflsa-shell [/path/to/openfoam/etc/bashrc]
+
+FOAM_BASHRC="${1:-/opt/openfoam14/etc/bashrc}"
+OFLSA_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+[ -f "$FOAM_BASHRC" ] || { echo "Not found: $FOAM_BASHRC (pass the path to OpenFOAM-14 etc/bashrc)"; exit 1; }
+
+RCFILE="$(mktemp)"
+cat > "$RCFILE" <<EOF
+source "$FOAM_BASHRC" < /dev/null > /dev/null 2>&1
+source "$OFLSA_DIR/etc/bashrc"
+PS1="(ofLSA) \w\$ "
+rm -f "$RCFILE"
+echo "OpenFOAM \$WM_PROJECT_VERSION + ofLSA loaded. ARPACK: \${ARPACK_LIB:-not found}"
+EOF
+
+exec env -i HOME="$HOME" USER="$USER" TERM="$TERM" DISPLAY="${DISPLAY:-}" \
+    PATH=/usr/local/bin:/usr/bin:/bin \
+    bash --rcfile "$RCFILE" -i

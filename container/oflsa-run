@@ -1,0 +1,13 @@
+#!/bin/bash
+# Load OpenFOAM-14 and ofLSA inside the container, then run the given command.
+#   oflsa-run StabilitySolver -parallel
+#   oflsa-run bash
+
+. /opt/openfoam14/etc/bashrc >/dev/null 2>&1 || true
+export FOAM_USER_LIBBIN=/opt/ofLSA/platforms/lib
+export FOAM_USER_APPBIN=/opt/ofLSA/platforms/bin
+export PATH="$FOAM_USER_APPBIN:$PATH"
+export LD_LIBRARY_PATH="$FOAM_USER_LIBBIN:$LD_LIBRARY_PATH"
+. /opt/ofLSA/etc/bashrc >/dev/null 2>&1 || true
+
+exec "$@"

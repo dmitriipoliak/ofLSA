@@ -1,0 +1,8 @@
+lnInclude/
+Make/linux64*/
+platforms/
+tutorials/*/processor*
+tutorials/*/log.*
+tutorials/*/case.foam
+tutorials/*/constant/polyMesh/
+tutorials/*/[1-9]*/

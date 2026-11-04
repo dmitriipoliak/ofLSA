@@ -1,0 +1,13 @@
+EXE_INC = \
+    -DOMPI_SKIP_MPICXX \
+    -I$(MPI_ARCH_PATH)/include \
+    -I$(OFLSA_DIR)/src/matrixFreeFGMRESSafe/lnInclude \
+    -I$(LIB_SRC)/finiteVolume/lnInclude \
+    -I$(LIB_SRC)/meshTools/lnInclude
+
+EXE_LIBS = \
+    -L$(MPI_ARCH_PATH)/lib \
+    -lmpi \
+    -lfiniteVolume \
+    -lmeshTools
+

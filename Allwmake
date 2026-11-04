@@ -1,0 +1,27 @@
+#!/bin/sh
+# Build the ofLSA library and solvers into the OpenFOAM user directories
+# ($FOAM_USER_LIBBIN, $FOAM_USER_APPBIN). No root needed.
+#
+#   source /opt/openfoam14/etc/bashrc
+#   source etc/bashrc
+#   ./Allwmake [-j]
+
+cd "${0%/*}" || exit 1
+
+[ -n "$WM_PROJECT_VERSION" ] || { echo "Load the OpenFOAM-14 environment first"; exit 1; }
+[ -n "$ARPACK_LIB" ] || { echo "Source etc/bashrc first (ARPACK not configured)"; exit 1; }
+
+case "$WM_PROJECT_VERSION" in
+    14*) ;;
+    *) echo "Warning: developed for OpenFOAM-14 (openfoam.org); found $WM_PROJECT_VERSION" ;;
+esac
+
+set -e
+
+wmake $* libso src/matrixFreeFGMRESSafe
+wmake $* applications/solvers/NewtonSolver
+wmake $* applications/solvers/StabilitySolver
+
+echo
+echo "Built:"
+ls "$FOAM_USER_APPBIN"/NewtonSolver "$FOAM_USER_APPBIN"/StabilitySolver

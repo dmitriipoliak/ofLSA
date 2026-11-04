@@ -1,0 +1,30 @@
+#!/bin/sh
+# 3D lid-driven cavity: base flow (Newton) + leading eigenmode (shift-invert PARPACK)
+#
+#   ./Allrun            # 4 MPI ranks
+#   ./Allrun -np 10
+#
+# Grid: 50^3 with sine stretching, Re = 2100 (system/newtonProperties and
+# system/stabilityProperties must use the SAME Re).
+# Converged reference (256^3, Gelfgat 2019 stretching): Re_cr ~ 1928.75, omega ~ 0.584.
+# This coarse grid is a quick check that the whole chain works.
+
+cd "${0%/*}" || exit 1
+
+NP=4
+[ "$1" = "-np" ] && NP="$2"
+
+command -v StabilitySolver >/dev/null || { echo "StabilitySolver not found: run ./Allwmake"; exit 1; }
+
+foamDictionary system/decomposeParDict -entry numberOfSubdomains -set "$NP" >/dev/null
+
+blockMesh                                   > log.blockMesh       2>&1 || exit 1
+decomposePar -force                         > log.decomposePar    2>&1 || exit 1
+mpirun -np "$NP" NewtonSolver -parallel     > log.NewtonSolver    2>&1 || exit 1
+mpirun -np "$NP" StabilitySolver -parallel  > log.StabilitySolver 2>&1 || exit 1
+reconstructPar -latestTime                  > log.reconstructPar  2>&1 || exit 1
+
+echo "Done. Leading eigenvalue:"
+grep -E "selected lambda|growth rate|angular frequency" log.StabilitySolver | tail -3
+touch case.foam
+echo "Open case.foam in ParaView (fields leadingEigenModeRealU / ImagU)."

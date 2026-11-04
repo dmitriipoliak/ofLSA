@@ -1,0 +1,21 @@
+EXE_INC = \
+    -DOMPI_SKIP_MPICXX \
+    -I$(MPI_ARCH_PATH)/include \
+    -I$(ARPACK_INC) \
+    -I$(ARPACK_INC)/.. \
+    -I$(OFLSA_DIR)/src/matrixFreeFGMRESSafe/lnInclude \
+    -I$(LIB_SRC)/finiteVolume/lnInclude \
+    -I$(LIB_SRC)/meshTools/lnInclude
+
+EXE_LIBS = \
+    -L$(MPI_ARCH_PATH)/lib \
+    -lmpi \
+    -L$(FOAM_USER_LIBBIN) \
+    -lmatrixFreeFGMRESSafe \
+    -L$(ARPACK_LIB) \
+    -Wl,-rpath,$(ARPACK_LIB) \
+    -lparpack \
+    -larpack \
+    -lgfortran \
+    -lfiniteVolume \
+    -lmeshTools

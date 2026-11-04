@@ -1,0 +1,6 @@
+#!/bin/sh
+cd "${0%/*}" || exit 1
+
+wclean libso src/matrixFreeFGMRESSafe
+wclean applications/solvers/NewtonSolver
+wclean applications/solvers/StabilitySolver
