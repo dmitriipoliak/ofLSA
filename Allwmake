@@ -1,20 +1,30 @@
-#!/bin/sh
-# Build the ofLSA library and solvers into the OpenFOAM user directories
-# ($FOAM_USER_LIBBIN, $FOAM_USER_APPBIN). No root needed.
+#!/bin/bash
+# Build ofLSA: ARPACK/PARPACK (if missing), the library and the solvers.
+# Everything goes into user directories; no root needed.
 #
-#   source /opt/openfoam14/etc/bashrc
-#   source etc/bashrc
+#   source /opt/openfoam14/etc/bashrc      (or: scripts/oflsa-shell)
 #   ./Allwmake [-j]
 
 cd "${0%/*}" || exit 1
 
-[ -n "$WM_PROJECT_VERSION" ] || { echo "Load the OpenFOAM-14 environment first"; exit 1; }
-[ -n "$ARPACK_LIB" ] || { echo "Source etc/bashrc first (ARPACK not configured)"; exit 1; }
+[ -n "$WM_PROJECT_VERSION" ] || { echo "Load the OpenFOAM-14 environment first (or use scripts/oflsa-shell)"; exit 1; }
 
 case "$WM_PROJECT_VERSION" in
     14*) ;;
     *) echo "Warning: developed for OpenFOAM-14 (openfoam.org); found $WM_PROJECT_VERSION" ;;
 esac
+
+source etc/bashrc
+
+# Build PARPACK automatically if it is not available
+if [ -z "$ARPACK_LIB" ]; then
+    echo "PARPACK not found: building it in \$HOME/software/arpack-ng-install (a few minutes)"
+    scripts/install_arpack.sh || exit 1
+    unset ARPACK_DIR ARPACK_LIB ARPACK_INC
+    source etc/bashrc
+    [ -n "$ARPACK_LIB" ] || { echo "PARPACK still not found after install"; exit 1; }
+fi
+echo "Using PARPACK from $ARPACK_LIB"
 
 set -e
 
