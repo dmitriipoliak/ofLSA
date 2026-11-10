@@ -1,28 +1,68 @@
 #!/bin/sh
-# 3D lid-driven cavity: base flow (Newton) + leading eigenmode (shift-invert PARPACK)
+# 3D lid-driven cavity: base flow (Newton, with Re continuation) + leading
+# eigenmode (shift-invert PARPACK).
 #
-#   ./Allrun            # 4 MPI ranks
+#   ./Allrun                       # 4 MPI ranks, target Re from system/newtonProperties
 #   ./Allrun -np 10
+#   ./Allrun -np 10 -ramp "250 750 1500"   # own continuation steps
+#   ./Allrun -np 10 -ramp none             # Newton directly at the target Re
 #
-# Grid: 50^3 with sine stretching, Re = 2100 (system/newtonProperties and
-# system/stabilityProperties must use the SAME Re).
-# Converged reference (256^3, Gelfgat 2019 stretching): Re_cr ~ 1928.75, omega ~ 0.584.
-# This coarse grid is a quick check that the whole chain works.
+# Newton from rest converges only at moderate Re, so by default the base flow is
+# computed at 250, 500, 1000, 1500, ... and then at the target Re; each step starts
+# from the previous solution (NewtonSolver writes it back into the start time).
+#
+# Grid: 50^3 with sine stretching. Converged reference (256^3, Gelfgat 2019
+# stretching): Re_cr ~ 1928.75, omega ~ 0.584. This grid is a quick check.
 
 cd "${0%/*}" || exit 1
 
 NP=4
-[ "$1" = "-np" ] && NP="$2"
+RAMP=auto
+while [ $# -gt 0 ]; do
+    case "$1" in
+        -np)   NP="$2"; shift 2 ;;
+        -ramp) RAMP="$2"; shift 2 ;;
+        *) echo "Unknown option $1"; exit 1 ;;
+    esac
+done
 
 command -v StabilitySolver >/dev/null || { echo "StabilitySolver not found: run ./Allwmake"; exit 1; }
 
+RE=$(foamDictionary system/newtonProperties -entry Re -value)
+echo "Target Re = $RE, $NP MPI ranks"
+
+if [ "$RAMP" = auto ]; then
+    RAMP=$(awk -v t="$RE" 'BEGIN { if (250 < t) printf "250 "; for (r = 500; r < t; r += 500) printf "%d ", r }')
+elif [ "$RAMP" = none ]; then
+    RAMP=""
+fi
+
 foamDictionary system/decomposeParDict -entry numberOfSubdomains -set "$NP" >/dev/null
 
-blockMesh                                   > log.blockMesh       2>&1 || exit 1
-decomposePar -force                         > log.decomposePar    2>&1 || exit 1
-mpirun -np "$NP" NewtonSolver -parallel     > log.NewtonSolver    2>&1 || exit 1
-mpirun -np "$NP" StabilitySolver -parallel  > log.StabilitySolver 2>&1 || exit 1
-reconstructPar -latestTime                  > log.reconstructPar  2>&1 || exit 1
+blockMesh            > log.blockMesh    2>&1 || { echo "blockMesh failed, see log.blockMesh"; exit 1; }
+decomposePar -force  > log.decomposePar 2>&1 || { echo "decomposePar failed, see log.decomposePar"; exit 1; }
+
+for r in $RAMP $RE; do
+    echo "NewtonSolver at Re = $r ..."
+    foamDictionary system/newtonProperties -entry Re -set "$r" >/dev/null
+    if ! mpirun -np "$NP" NewtonSolver -parallel > "log.NewtonSolver.Re$r" 2>&1; then
+        foamDictionary system/newtonProperties -entry Re -set "$RE" >/dev/null
+        echo "NewtonSolver failed at Re = $r, see log.NewtonSolver.Re$r"
+        echo "Try smaller continuation steps: ./Allrun -np $NP -ramp \"...\""
+        exit 1
+    fi
+    grep "^Newton " "log.NewtonSolver.Re$r" | tail -1
+done
+cp "log.NewtonSolver.Re$RE" log.NewtonSolver
+
+# Stability at the target Re (both dictionaries must agree)
+foamDictionary system/stabilityProperties -entry Re -set "$RE" >/dev/null
+
+echo "StabilitySolver at Re = $RE ..."
+mpirun -np "$NP" StabilitySolver -parallel > log.StabilitySolver 2>&1 \
+    || { echo "StabilitySolver failed, see log.StabilitySolver"; exit 1; }
+
+reconstructPar -latestTime > log.reconstructPar 2>&1
 
 echo "Done. Leading eigenvalue:"
 grep -E "selected lambda|growth rate|angular frequency" log.StabilitySolver | tail -3

@@ -93,7 +93,10 @@ Rough size guide: 50³ — a workstation; 100³ — a big node; 256³ — a clus
 
 ### Re continuation
 
-Newton converges from rest at moderate Re. At high Re start from a lower-Re solution:
+Newton converges from rest only at moderate Re (on the 50³ grid it fails from rest at
+Re = 2100). `Allrun` therefore ramps Re automatically: 250, 500, 1000, 1500, … then the
+target; set your own steps with `./Allrun -ramp "300 900 1600"`, or skip with `-ramp none`.
+By hand:
 compute at Re = 1000, then `scripts/setRe 1500` and run `NewtonSolver` again (without
 `Allrun`, which would re-create the mesh and reset the fields): Newton writes its solution
 back into the start time and starts from it next time. Repeat up to the target Re.
