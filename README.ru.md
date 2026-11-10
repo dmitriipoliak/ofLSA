@@ -109,7 +109,7 @@ tail -f log.Allrun
 
 1. `blockMesh` — строит сетку (50×50×50, сгущённую к стенкам);
 2. `decomposePar` — режет её на куски, по одному на ядро;
-3. `NewtonSolver` — стационарное течение, поднимая Re постепенно (200 → 500 → 1000 → … → цель),
+3. `NewtonSolver` — стационарное течение, поднимая Re постепенно (200 → 500 → 1000 → 1250 → 1500 → … → цель),
    потому что из покоя при большом Re Ньютон не сходится;
 4. `StabilitySolver` — собственные числа и мода при целевом Re;
 5. `reconstructPar` — склеивает куски обратно.
@@ -200,9 +200,10 @@ makeCavityMesh.py 100 0.0975          # внутри папки кейса
 mpirun -np 8 StabilitySolver -parallel > log.StabilitySolver 2>&1
 ```
 
-**Newton не сходится при твоём Re** — делай шаги мельче:
+**Newton не сошёлся на каком-то Re** — последнее сошедшееся течение сохраняется; продолжай
+от него мельче, не пересоздавая сетку:
 ```bash
-./Allrun -np 8 -ramp "250 500 750 1000 1250 1500 1750"
+./Allrun -np 8 -continue -ramp "1625 1750 1875 2000"
 ```
 
 **Найти критическое Re** — посчитай при нескольких Re вокруг ожидаемого (например, 1850, 1900,
@@ -216,7 +217,7 @@ mpirun -np 8 StabilitySolver -parallel > log.StabilitySolver 2>&1
 |---|---|---|
 | `source .../bashrc` виснет или `_foamSource: command not found` | OpenFOAM при загрузке вызывает `paraview --version`, на некоторых Ubuntu это виснет | `scripts/oflsa-shell`; или один раз `Ctrl+C` |
 | `exe-not-found` от `mpirun` | в этом терминале не подключён OpenFOAM | сначала `scripts/oflsa-shell` |
-| `Newton FGMRES failed after 200 iterations` | Ньютон стартовал слишком далеко от решения | мельче шаги `-ramp` |
+| `Newton FGMRES failed after 200 iterations` | Ньютон стартовал слишком далеко от решения | `./Allrun -continue -ramp "..."` с шагами мельче |
 | `PARPACK Arnoldi basis vector ... left the required ... solenoidal space` | накопились мелкие ошибки внутренних решений | в `stabilityProperties`: `shiftInvertTolerance 1e-6` и/или `arnoldiConstraintTolerance 1e-3` |
 | `cannot find -liomp5 / -lifport` | старый `Make/options` под компилятор Intel | брать файлы из этого репозитория |
 | `PARPACK not found` | не установлен ARPACK | `scripts/install_arpack.sh` или `sudo apt install libarpack2-dev libparpack2-dev` |

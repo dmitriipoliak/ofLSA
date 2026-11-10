@@ -6,9 +6,12 @@
 #   ./Allrun -np 10
 #   ./Allrun -np 10 -ramp "250 750 1500"   # own continuation steps
 #   ./Allrun -np 10 -ramp none             # Newton directly at the target Re
+#   ./Allrun -np 10 -continue -ramp "1750 2000"   # keep the mesh and the last
+#                                          # converged base flow, go on from there
 #
 # Newton from rest converges only at moderate Re, so by default the base flow is
-# computed at 200, 500, 1000, 1500, ... and then at the target Re; each step starts
+# computed at 200, 500, 1000, then every 250 (1250, 1500, ...) and finally at the
+# target Re (on 50^3 the jump 1500 -> 2000 already fails); each step starts
 # from the previous solution (NewtonSolver writes it back into the start time).
 #
 # Grid: 50^3 with sine stretching. Converged reference (256^3, Gelfgat 2019
@@ -18,10 +21,12 @@ cd "${0%/*}" || exit 1
 
 NP=4
 RAMP=auto
+CONTINUE=no
 while [ $# -gt 0 ]; do
     case "$1" in
         -np)   NP="$2"; shift 2 ;;
         -ramp) RAMP="$2"; shift 2 ;;
+        -continue) CONTINUE=yes; shift ;;
         *) echo "Unknown option $1"; exit 1 ;;
     esac
 done
@@ -32,15 +37,19 @@ RE=$(foamDictionary system/newtonProperties -entry Re -value)
 echo "Target Re = $RE, $NP MPI ranks"
 
 if [ "$RAMP" = auto ]; then
-    RAMP=$(awk -v t="$RE" 'BEGIN { if (200 < t) printf "200 "; for (r = 500; r < t; r += 500) printf "%d ", r }')
+    RAMP=$(awk -v t="$RE" 'BEGIN { n = split("200 500 1000", a, " "); for (i = 1; i <= n; i++) if (a[i] < t) printf "%d ", a[i]; for (r = 1250; r < t; r += 250) printf "%d ", r }')
 elif [ "$RAMP" = none ]; then
     RAMP=""
 fi
 
-foamDictionary system/decomposeParDict -entry numberOfSubdomains -set "$NP" >/dev/null
-
-blockMesh            > log.blockMesh    2>&1 || { echo "blockMesh failed, see log.blockMesh"; exit 1; }
-decomposePar -force  > log.decomposePar 2>&1 || { echo "decomposePar failed, see log.decomposePar"; exit 1; }
+if [ "$CONTINUE" = no ]; then
+    foamDictionary system/decomposeParDict -entry numberOfSubdomains -set "$NP" >/dev/null
+    blockMesh            > log.blockMesh    2>&1 || { echo "blockMesh failed, see log.blockMesh"; exit 1; }
+    decomposePar -force  > log.decomposePar 2>&1 || { echo "decomposePar failed, see log.decomposePar"; exit 1; }
+else
+    [ -d processor0 ] || { echo "-continue: no processor* folders, run without -continue first"; exit 1; }
+    echo "Continuing from the existing mesh and base flow"
+fi
 
 for r in $RAMP $RE; do
     echo "NewtonSolver at Re = $r ..."
@@ -48,7 +57,8 @@ for r in $RAMP $RE; do
     if ! mpirun -np "$NP" NewtonSolver -parallel > "log.NewtonSolver.Re$r" 2>&1; then
         foamDictionary system/newtonProperties -entry Re -set "$RE" >/dev/null
         echo "NewtonSolver failed at Re = $r, see log.NewtonSolver.Re$r"
-        echo "Try smaller continuation steps: ./Allrun -np $NP -ramp \"...\""
+        echo "The last converged base flow is kept. Continue with smaller steps, e.g.:"
+        echo "  ./Allrun -np $NP -continue -ramp \"<smaller steps up to $RE>\""
         exit 1
     fi
     grep "^Newton " "log.NewtonSolver.Re$r" | tail -1

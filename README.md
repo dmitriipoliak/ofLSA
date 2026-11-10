@@ -112,7 +112,7 @@ What `Allrun` does, in order:
 
 1. `blockMesh` — builds the grid (50×50×50, refined towards the walls);
 2. `decomposePar` — cuts it into pieces, one per core;
-3. `NewtonSolver` — the steady flow, raising Re gradually (200 → 500 → 1000 → … → target),
+3. `NewtonSolver` — the steady flow, raising Re gradually (200 → 500 → 1000 → 1250 → 1500 → … → target),
    because Newton does not converge if you start from rest at high Re;
 4. `StabilitySolver` — the eigenvalues and eigenmode at the target Re;
 5. `reconstructPar` — glues the pieces back together.
@@ -203,9 +203,10 @@ After changing only these, you do not need to recompute the steady flow:
 mpirun -np 8 StabilitySolver -parallel > log.StabilitySolver 2>&1
 ```
 
-**Newton fails at your Re** — make the steps smaller:
+**Newton fails at some Re** — the last converged base flow is kept; continue from it with
+smaller steps, without rebuilding the mesh:
 ```bash
-./Allrun -np 8 -ramp "250 500 750 1000 1250 1500 1750"
+./Allrun -np 8 -continue -ramp "1625 1750 1875 2000"
 ```
 
 **Find the critical Re** — run at a few Re around the expected value (e.g. 1850, 1900,
@@ -219,7 +220,7 @@ mpirun -np 8 StabilitySolver -parallel > log.StabilitySolver 2>&1
 |---|---|---|
 | `source .../bashrc` hangs, or `_foamSource: command not found` | OpenFOAM calls `paraview --version` at load time; on some Ubuntu desktops that hangs | use `scripts/oflsa-shell`; or press `Ctrl+C` once |
 | `exe-not-found` from `mpirun` | OpenFOAM is not loaded in this terminal | `scripts/oflsa-shell` first |
-| `Newton FGMRES failed after 200 iterations` | Newton started too far from the solution | smaller `-ramp` steps |
+| `Newton FGMRES failed after 200 iterations` | Newton started too far from the solution | `./Allrun -continue -ramp "..."` with smaller steps |
 | `PARPACK Arnoldi basis vector ... left the required ... solenoidal space` | small errors of the inner solves accumulated | in `stabilityProperties`: `shiftInvertTolerance 1e-6` and/or `arnoldiConstraintTolerance 1e-3` |
 | `cannot find -liomp5 / -lifport` | an old `Make/options` with the Intel compiler | use the files from this repository |
 | `PARPACK not found` | ARPACK not installed | `scripts/install_arpack.sh`, or `sudo apt install libarpack2-dev libparpack2-dev` |
