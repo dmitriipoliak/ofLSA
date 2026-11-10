@@ -203,10 +203,12 @@ After changing only these, you do not need to recompute the steady flow:
 mpirun -np 8 StabilitySolver -parallel > log.StabilitySolver 2>&1
 ```
 
-**Newton fails at some Re** — the last converged base flow is kept; continue from it with
-smaller steps, without rebuilding the mesh:
+**Newton fails at some Re** — `Allrun` halves the Re step by itself and retries
+(down to a step of 10). If it still stops, the last converged base flow stays on disk and its
+Re is in the file `lastConvergedRe`; continue from it without rebuilding the mesh:
 ```bash
-./Allrun -np 8 -continue -ramp "1625 1750 1875 2000"
+./Allrun -np 8 -continue                 # from lastConvergedRe
+./Allrun -np 8 -continue -from 1500      # if you know the Re of the flow on disk
 ```
 
 **Find the critical Re** — run at a few Re around the expected value (e.g. 1850, 1900,
