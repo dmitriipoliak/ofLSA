@@ -15,7 +15,7 @@ nuInput                    1;
 jacobianSign               -1;
 
 sigmaReal                  0;
-sigmaImag                  0.584;
+sigmaImag                  0.5;
 
 continuityWeight           1;
 
