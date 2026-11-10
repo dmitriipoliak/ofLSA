@@ -1,0 +1,16 @@
+#!/bin/sh
+# Set the Reynolds number in BOTH newtonProperties and stabilityProperties
+# (they must always match: the base flow and its stability at the same Re).
+#
+# Usage:  scripts/setRe <Re> [caseDir]      (caseDir defaults to .)
+
+[ -n "$1" ] || { echo "Usage: $0 <Re> [caseDir]"; exit 1; }
+RE="$1"
+CASE="${2:-.}"
+
+for f in "$CASE/system/newtonProperties" "$CASE/system/stabilityProperties"; do
+    [ -f "$f" ] || { echo "Not found: $f"; exit 1; }
+    sed -i "s/^\(Re[[:space:]]*\)[0-9.eE+-]*;/\1$RE;/" "$f"
+done
+
+grep -H "^Re" "$CASE/system/newtonProperties" "$CASE/system/stabilityProperties"
