@@ -112,7 +112,7 @@ What `Allrun` does, in order:
 
 1. `blockMesh` — builds the grid (50×50×50, refined towards the walls);
 2. `decomposePar` — cuts it into pieces, one per core;
-3. `NewtonSolver` — the steady flow, raising Re gradually (250 → 500 → 1000 → … → target),
+3. `NewtonSolver` — the steady flow, raising Re gradually (200 → 500 → 1000 → … → target),
    because Newton does not converge if you start from rest at high Re;
 4. `StabilitySolver` — the eigenvalues and eigenmode at the target Re;
 5. `reconstructPar` — glues the pieces back together.

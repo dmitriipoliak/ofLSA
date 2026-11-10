@@ -8,7 +8,7 @@
 #   ./Allrun -np 10 -ramp none             # Newton directly at the target Re
 #
 # Newton from rest converges only at moderate Re, so by default the base flow is
-# computed at 250, 500, 1000, 1500, ... and then at the target Re; each step starts
+# computed at 200, 500, 1000, 1500, ... and then at the target Re; each step starts
 # from the previous solution (NewtonSolver writes it back into the start time).
 #
 # Grid: 50^3 with sine stretching. Converged reference (256^3, Gelfgat 2019
@@ -32,7 +32,7 @@ RE=$(foamDictionary system/newtonProperties -entry Re -value)
 echo "Target Re = $RE, $NP MPI ranks"
 
 if [ "$RAMP" = auto ]; then
-    RAMP=$(awk -v t="$RE" 'BEGIN { if (250 < t) printf "250 "; for (r = 500; r < t; r += 500) printf "%d ", r }')
+    RAMP=$(awk -v t="$RE" 'BEGIN { if (200 < t) printf "200 "; for (r = 500; r < t; r += 500) printf "%d ", r }')
 elif [ "$RAMP" = none ]; then
     RAMP=""
 fi
