@@ -1,198 +1,279 @@
-# ofLSA — matrix-free 3D global linear stability analysis in OpenFOAM
+# ofLSA — global linear stability analysis of 3D flows in OpenFOAM
 
-Newton solver for steady base flows and a shift-invert Arnoldi (PARPACK) eigensolver
-for the leading global modes of incompressible flows, built on **OpenFOAM-14 (openfoam.org)**.
+*Русская версия: [README.ru.md](README.ru.md)*
 
-Reference: Y. Feldman et al., *Massively parallel matrix-free 3D global linear stability
-analysis of incompressible flows in OpenFOAM* (in preparation).
+This repository answers one question about a flow: **at what Reynolds number does a steady
+flow stop being steady, and what does the disturbance that grows look like?**
 
----
-
-## What the code does
-
-A global linear stability analysis answers: **at which Reynolds number does a steady flow
-become unstable, with what frequency, and what does the growing disturbance look like?**
-It is done in two steps.
-
-**1. Base flow — `NewtonSolver`.**
-Solves the *steady* incompressible Navier–Stokes equations directly with Newton's method
-(no time stepping). Each Newton step is a large linear saddle-point system for velocity and
-pressure; it is solved matrix-free with FGMRES and a modified augmented-Lagrangian (mAL)
-preconditioner, built from standard OpenFOAM scalar solvers. Result: steady `U`, `p`, `phi`.
-
-**2. Eigenmodes — `StabilitySolver`.**
-Linearises Navier–Stokes around that base flow. Small perturbations behave as
-`exp(λ t)`, `λ = λr + iω`:
-
-- `λr < 0` for every mode — the flow is stable; `λr > 0` for some mode — unstable;
-- the critical Re is where the leading `λr` crosses zero; `ω` is the frequency of the
-  oscillations that appear.
-
-The leading eigenvalues are found by the Arnoldi method (PARPACK) in **shift-invert** mode:
-you give a shift `σ` near the expected eigenvalue, and the method converges quickly to the
-eigenvalues closest to it. Each Arnoldi step solves a shifted linearised system, again
-matrix-free with FGMRES + mAL. Result: `λ` in the log and the mode shape as fields
-`leadingEigenModeRealU/ImagU/RealP/ImagP`.
-
-No matrix is ever assembled, so large 3D grids (256³ ≈ 17 M cells) fit in memory and run in
-parallel on many cores.
+It contains two solvers for OpenFOAM-14 (openfoam.org), written by Y. Feldman's group
+(Ben-Gurion University), and a ready-to-run example: the 3D lid-driven cavity.
 
 ---
 
-## Quick start
+## 1. The idea in five minutes
+
+Take a cube filled with fluid whose top lid slides at constant speed. At low Re the fluid
+settles into a steady vortex. Raise Re, and at some point the steady vortex can no longer
+survive: any tiny disturbance grows and the flow starts to oscillate. That point is the
+**critical Reynolds number**. For the cube it is Re ≈ 1929.
+
+We find it in two steps — one solver each.
+
+**Step 1 — the steady flow (`NewtonSolver`).**
+We need the steady flow even where it is unstable (nature would never show it to us there,
+but mathematically it exists). A time-stepping solver cannot find it — it would drift away
+into the oscillating flow. So we solve the *steady* Navier–Stokes equations directly with
+Newton's method: guess, correct, repeat, until the residual is tiny.
+
+**Step 2 — will a small disturbance grow? (`StabilitySolver`).**
+We add a tiny disturbance to the steady flow and ask how it evolves. Because it is tiny,
+its equations are linear, and their solutions behave like `e^(λt)` with a complex number
+`λ = λr + i·ω`:
+
+| | meaning |
+|---|---|
+| `λr < 0` | the disturbance dies out — the flow is **stable** |
+| `λr > 0` | it grows — the flow is **unstable** |
+| `λr = 0` | the boundary: this Re is the **critical** one |
+| `ω` | the angular frequency of the oscillations that will appear |
+
+The solver finds the few `λ` with the largest `λr` (the most dangerous disturbances) and
+writes out their shape — the **eigenmode** — which you can look at in ParaView.
+
+**Why it is hard, and what is special here.** A 256³ grid has about 17 million cells, i.e.
+~70 million unknowns. Building and inverting such a matrix is impossible. Here no matrix is
+ever built: every operation is done "on the fly" with OpenFOAM's own operators, and the
+big linear systems are solved iteratively (FGMRES) with a good preconditioner (modified
+augmented Lagrangian, mAL). The eigenvalues are found with PARPACK (Arnoldi method) in
+*shift-invert* mode: you tell it roughly where to look (`σ`), and it quickly finds the
+eigenvalues nearest to that point.
+
+---
+
+## 2. What you need
+
+- **Linux** (a workstation or a cluster; no root needed).
+- **OpenFOAM-14** from openfoam.org. *Not* the ESI version (openfoam.com, v2406/v2606) —
+  that is a different code base.
+- **MPI** (OpenMPI) with a Fortran compiler — usually comes with OpenFOAM; on a cluster
+  `module load gcc openmpi`.
+- **ARPACK/PARPACK** — if you don't have it, the build script installs it into your home
+  directory automatically.
+
+Installing OpenFOAM-14 on Ubuntu (needs root):
+```bash
+sudo sh -c "wget -O - https://dl.openfoam.org/gpg.key > /etc/apt/trusted.gpg.d/openfoam.asc"
+sudo add-apt-repository http://dl.openfoam.org/ubuntu
+sudo apt update
+sudo apt install openfoam14 libarpack2-dev libparpack2-dev
+```
+On a cluster without root: use the cluster's OpenFOAM-14 module, or the container (section 8).
+
+---
+
+## 3. First run, step by step
 
 ```bash
-source /opt/openfoam14/etc/bashrc          # or: scripts/oflsa-shell
-git clone https://github.com/<owner>/<repo>.git && cd <repo>
-./Allwmake                                  # builds PARPACK too if it is missing
+git clone https://github.com/<owner>/<repo>.git ofLSA
+cd ofLSA
+```
 
+**Load the environment.**
+```bash
+scripts/oflsa-shell
+```
+This opens a new shell with OpenFOAM-14 and this project loaded; the prompt becomes
+`(ofLSA) ...$`. Type the next commands *after* the prompt appears.
+(Alternative: `source /opt/openfoam14/etc/bashrc`, then `source etc/bashrc`.)
+
+**Build.**
+```bash
+./Allwmake
+```
+Compiles the FGMRES library and both solvers (a couple of minutes). If PARPACK is not
+found, it is built first (5–20 min). At the end you should see:
+```
+Built:
+.../bin/NewtonSolver
+.../bin/StabilitySolver
+```
+
+**Run the example.**
+```bash
 cd tutorials/lidDrivenCavity3D
-./Allrun -np 4
+nohup ./Allrun -np 4 > log.Allrun 2>&1 &
+tail -f log.Allrun
 ```
+- `-np 4` — number of CPU cores to use. Use as many as you have.
+- `nohup ... &` — runs in the background, keeps running if you close the terminal.
+- `tail -f` — shows progress; `Ctrl+C` leaves the view, the run continues.
 
-`Allrun` does: `blockMesh` → `decomposePar` → `NewtonSolver` → `StabilitySolver` →
-`reconstructPar`, and prints the leading eigenvalue. Logs: `log.*`.
-To run in the background: `nohup ./Allrun -np 8 > log.Allrun 2>&1 &`.
+What `Allrun` does, in order:
 
-Results: `touch case.foam` and open it in ParaView; the mode is in `leadingEigenModeRealU`
-(and `...ImagU`) in the last time folder.
+1. `blockMesh` — builds the grid (50×50×50, refined towards the walls);
+2. `decomposePar` — cuts it into pieces, one per core;
+3. `NewtonSolver` — the steady flow, raising Re gradually (250 → 500 → 1000 → … → target),
+   because Newton does not converge if you start from rest at high Re;
+4. `StabilitySolver` — the eigenvalues and eigenmode at the target Re;
+5. `reconstructPar` — glues the pieces back together.
+
+Expect minutes for the Newton part and longer for the stability part, depending on cores.
 
 ---
 
-## Changing the case
+## 4. Reading the results
 
-Copy the tutorial and edit the copy — keep the original as a reference:
-`cp -r tutorials/lidDrivenCavity3D $FOAM_RUN/myCase && cd $FOAM_RUN/myCase`
+**In `log.Allrun`** — one line per Newton step:
+```
+NewtonSolver at Re = 1000 ...
+Newton 6: momentum=3.1e-08 continuity=2.2e-12
+```
+Small numbers = converged.
 
-| What | Where | How |
+**The answer** — at the end of `log.Allrun` (or `log.StabilitySolver`):
+```
+growth rate Re(lambda)      = -0.0123      <- λr: negative = stable
+angular frequency Im(lambda)= 0.581        <- ω
+```
+
+**The eigenmode in ParaView:**
+```bash
+paraview case.foam
+```
+Click *Apply*, pick the field `leadingEigenModeRealU` (and `leadingEigenModeImagU`).
+These are the real and imaginary parts of the growing disturbance; an iso-surface of one
+velocity component shows its 3D structure.
+
+---
+
+## 5. What is in the case folder
+
+```
+tutorials/lidDrivenCavity3D/
+├── 0/U, 0/p                  initial and boundary conditions (lid velocity = 1)
+├── system/
+│   ├── blockMeshDict         the grid
+│   ├── newtonProperties      settings of the steady solver   (Re, tolerances)
+│   ├── stabilityProperties   settings of the eigen solver    (Re, shift σ, number of modes)
+│   ├── decomposeParDict      how to split over cores (set by Allrun)
+│   ├── controlDict, fvSchemes, fvSolution    standard OpenFOAM files
+├── Allrun                    runs everything
+└── Allclean                  deletes results, keeps settings
+```
+
+Re is defined with the lid speed (1) and the cube side (1): ν = 1/Re.
+
+---
+
+## 6. Recipes: changing the case
+
+Work on a copy, keep the original:
+```bash
+cp -r tutorials/lidDrivenCavity3D ~/myCavity && cd ~/myCavity
+```
+
+The helper scripts (`setRe`, `makeCavityMesh.py`) are on the PATH once the environment is
+loaded, so you can call them from any case folder.
+
+**Change the Reynolds number**
+```bash
+setRe 1900
+./Allrun -np 8
+```
+`setRe` changes Re in *both* `newtonProperties` and `stabilityProperties`. They must always
+be equal — the stability is computed for the flow at that Re.
+
+**Change the grid**
+```bash
+makeCavityMesh.py 100 0.0975          # run inside the case folder
+```
+`100` — cells in each direction; `0.0975` — how strongly cells are squeezed towards the
+walls (0 = uniform). It overwrites `system/blockMeshDict`; then run `./Allrun` again. Grid sizes: 50³ — any PC; 100³ (1 M cells) — a strong workstation;
+256³ (17 M) — a cluster (the paper used 256 cores and 14–30 hours).
+
+**Use more or fewer cores** — just `./Allrun -np 16`.
+
+**Look for other eigenvalues** — in `system/stabilityProperties`:
+- `sigmaImag 0.5` — where to look along the frequency axis; put it near the `ω` you expect;
+- `arnoldiNev 2` — how many eigenvalues to find; `arnoldiNcv` — the working basis,
+  keep it at least `2·nev + 1`.
+
+After changing only these, you do not need to recompute the steady flow:
+```bash
+mpirun -np 8 StabilitySolver -parallel > log.StabilitySolver 2>&1
+```
+
+**Newton fails at your Re** — make the steps smaller:
+```bash
+./Allrun -np 8 -ramp "250 500 750 1000 1250 1500 1750"
+```
+
+**Find the critical Re** — run at a few Re around the expected value (e.g. 1850, 1900,
+1950, 2000), note `λr` for each, and interpolate to where `λr = 0`.
+
+---
+
+## 7. When something goes wrong
+
+| What you see | Why | What to do |
 |---|---|---|
-| **Reynolds number** | `system/newtonProperties` **and** `system/stabilityProperties` → `Re` | `scripts/setRe 1900` — sets both at once. They must always be equal |
-| **Grid size / stretching** | `system/blockMeshDict` | `scripts/makeCavityMesh.py N a` (see below) |
-| **Number of cores** | `system/decomposeParDict` | `./Allrun -np N` sets it; method `scotch` works for any N |
-| **Where to look for eigenvalues** | `system/stabilityProperties` → `sigmaReal`, `sigmaImag` | put `σ` near the expected `λ`, e.g. `sigmaImag 0.58` for the cavity near Re_cr |
-| **How many eigenvalues** | `stabilityProperties` → `arnoldiNev` (wanted), `arnoldiNcv` (basis size, > 2·nev) | e.g. `nev 4`, `ncv 16` |
-| **Inner solve accuracy** | `stabilityProperties` → `shiftInvertTolerance` | smaller = slower but more accurate, see Troubleshooting |
-| **Newton convergence** | `newtonProperties` → `newtonTolerance`, `maxNewtonIter` | |
-
-### Grid
-
-The cavity grid uses sine stretching towards the walls (Gelfgat, TCFD 2019):
-`x_i = i/N − a·sin(2πi/N)`, the same in x, y, z.
-
-```bash
-scripts/makeCavityMesh.py 50 0.12       # tutorial grid, 125 k cells
-scripts/makeCavityMesh.py 100 0.0975    # 1 M cells
-scripts/makeCavityMesh.py 256 0.0975    # Gelfgat 2019 / paper grid, 16.7 M cells
-scripts/makeCavityMesh.py 64 0          # uniform
-```
-
-It writes `system/blockMeshDict` in the current case (or `-o path`). Then rerun from `blockMesh`.
-
-Rough size guide: 50³ — a workstation; 100³ — a big node; 256³ — a cluster
-(the paper used 256 cores, 14–30 h).
-
-### Re continuation
-
-Newton converges from rest only at moderate Re (on the 50³ grid it fails from rest at
-Re = 2100). `Allrun` therefore ramps Re automatically: 250, 500, 1000, 1500, … then the
-target; set your own steps with `./Allrun -ramp "300 900 1600"`, or skip with `-ramp none`.
-By hand:
-compute at Re = 1000, then `scripts/setRe 1500` and run `NewtonSolver` again (without
-`Allrun`, which would re-create the mesh and reset the fields): Newton writes its solution
-back into the start time and starts from it next time. Repeat up to the target Re.
-
-### Running only one step
-
-```bash
-mpirun -np 8 NewtonSolver -parallel      > log.NewtonSolver 2>&1
-mpirun -np 8 StabilitySolver -parallel   > log.StabilitySolver 2>&1
-```
-
-`StabilitySolver` reads the base flow written by `NewtonSolver`, so after changing only
-`sigma`/`nev` you need to rerun only the second line. After changing **Re or the grid**
-rerun both.
+| `source .../bashrc` hangs, or `_foamSource: command not found` | OpenFOAM calls `paraview --version` at load time; on some Ubuntu desktops that hangs | use `scripts/oflsa-shell`; or press `Ctrl+C` once |
+| `exe-not-found` from `mpirun` | OpenFOAM is not loaded in this terminal | `scripts/oflsa-shell` first |
+| `Newton FGMRES failed after 200 iterations` | Newton started too far from the solution | smaller `-ramp` steps |
+| `PARPACK Arnoldi basis vector ... left the required ... solenoidal space` | small errors of the inner solves accumulated | in `stabilityProperties`: `shiftInvertTolerance 1e-6` and/or `arnoldiConstraintTolerance 1e-3` |
+| `cannot find -liomp5 / -lifport` | an old `Make/options` with the Intel compiler | use the files from this repository |
+| `PARPACK not found` | ARPACK not installed | `scripts/install_arpack.sh`, or `sudo apt install libarpack2-dev libparpack2-dev` |
+| ParaView does not open from a terminal | same ParaView issue | `nohup paraview case.foam > /dev/null 2>&1 < /dev/null &` |
 
 ---
 
-## Installation details
+## 8. Running on a cluster without OpenFOAM: container
 
-### Option A — build from source (no root needed)
-
-Prerequisites:
-
-- **OpenFOAM-14** (openfoam.org): system or cluster install, or the official image via
-  Apptainer (see openfoam.org/download). Ubuntu with root:
-  ```bash
-  sudo sh -c "wget -O - https://dl.openfoam.org/gpg.key > /etc/apt/trusted.gpg.d/openfoam.asc"
-  sudo add-apt-repository http://dl.openfoam.org/ubuntu
-  sudo apt update && sudo apt install openfoam14
-  ```
-- **MPI with a Fortran compiler** (`mpif90`) — on clusters `module load gcc openmpi`.
-- **ARPACK/PARPACK** — found automatically:
-  `ARPACK_DIR` if set → `~/software/arpack-ng-install` → system packages
-  (`sudo apt install libarpack2-dev libparpack2-dev`).
-  If none is found, `./Allwmake` runs `scripts/install_arpack.sh`, which builds arpack-ng
-  with MPI into `$HOME` (and OpenBLAS too if there is no LAPACK). No root needed.
-
-Binaries go to `$FOAM_USER_APPBIN`, the library to `$FOAM_USER_LIBBIN`.
-
-### Option B — container (clusters, nothing to build)
-
+The container has OpenFOAM-14, PARPACK and the solvers inside. It needs Apptainer
+(Singularity), which most clusters have:
 ```bash
 apptainer pull oflsa.sif docker://ghcr.io/<owner>/<repo>:latest
-cd mycase
-apptainer exec ../oflsa.sif oflsa-run blockMesh
-apptainer exec ../oflsa.sif oflsa-run decomposePar
-mpirun -np 8 apptainer exec ../oflsa.sif oflsa-run NewtonSolver -parallel
-mpirun -np 8 apptainer exec ../oflsa.sif oflsa-run StabilitySolver -parallel
+cd ~/myCavity
+apptainer exec ~/oflsa.sif oflsa-run blockMesh
+apptainer exec ~/oflsa.sif oflsa-run decomposePar
+mpirun -np 32 apptainer exec ~/oflsa.sif oflsa-run NewtonSolver -parallel
+mpirun -np 32 apptainer exec ~/oflsa.sif oflsa-run StabilitySolver -parallel
 ```
-
-Multi-node runs need the host MPI to be compatible with the container's OpenMPI.
+For runs over several nodes the cluster's OpenMPI must be compatible with the one in the
+container — ask your cluster support which module to load.
 
 ---
 
-## Expected results
+## 9. Reference values
 
 | Case | Re_cr | ω |
 |---|---|---|
 | Cubic lid-driven cavity | ≈ 1928.75 | ≈ 0.584 |
 | Diagonally driven cavity | ≈ 2320.8 | ≈ 0.251 |
 
-Values for the 256³ grid. The 50³ tutorial is a quick check of the whole chain.
+On the 256³ grid. The 50³ example is coarse — it checks that everything works, the numbers
+will differ somewhat.
 
 ---
 
-## Repository layout
+## 10. Repository layout
 
-| Path | What |
+| Path | What it is |
 |---|---|
-| `src/matrixFreeFGMRESSafe` | Matrix-free FGMRES library |
-| `applications/solvers/NewtonSolver` | Steady base flow (Newton + FGMRES + mAL) |
-| `applications/solvers/StabilitySolver` | Leading eigenmodes (shift-invert + PARPACK) |
-| `tutorials/lidDrivenCavity3D` | Test case |
-| `etc/bashrc` | Environment, locates ARPACK |
-| `scripts/oflsa-shell` | Clean shell with OpenFOAM-14 + ofLSA loaded |
-| `scripts/install_arpack.sh` | Builds arpack-ng (+ OpenBLAS) in `$HOME` |
-| `scripts/setRe` | Sets Re in both solver dictionaries |
-| `scripts/makeCavityMesh.py` | Generates the stretched cavity grid |
-| `container/` | Docker/Apptainer image |
+| `src/matrixFreeFGMRESSafe` | iterative linear solver (FGMRES) without assembled matrices |
+| `applications/solvers/NewtonSolver` | steady flow by Newton's method |
+| `applications/solvers/StabilitySolver` | eigenvalues and eigenmodes (PARPACK, shift-invert) |
+| `tutorials/lidDrivenCavity3D` | the example |
+| `scripts/oflsa-shell` | opens a terminal with everything loaded |
+| `scripts/setRe` | sets Re in both settings files |
+| `scripts/makeCavityMesh.py` | generates the cavity grid |
+| `scripts/install_arpack.sh` | installs PARPACK into your home directory |
+| `etc/bashrc` | finds PARPACK, sets paths |
+| `container/` | recipe of the container |
 
----
+## Citation and license
 
-## Troubleshooting
+Y. Feldman et al., *Massively parallel matrix-free 3D global linear stability analysis of
+incompressible flows in OpenFOAM* (in preparation).
 
-- **`source .../openfoam14/etc/bashrc` hangs**, or `_foamSource: command not found`
-  (seen on Ubuntu 26.04 desktops; OpenFOAM calls `paraview --version`, which hangs) —
-  use `scripts/oflsa-shell`, or press Ctrl+C once: only the ParaView check is interrupted.
-- **`exe-not-found` from mpirun** — the OpenFOAM environment is not loaded in that shell.
-- **StabilitySolver stops: `PARPACK Arnoldi basis vector ... left the required discrete
-  homogeneous solenoidal space`** — the divergence of the Arnoldi vectors grew above
-  `arnoldiConstraintTolerance` because the inner solves are inexact. Tighten
-  `shiftInvertTolerance` (e.g. `1e-6`) and/or relax `arnoldiConstraintTolerance` (e.g. `1e-3`).
-- **`cannot find -liomp5 / -lifport ...`** — an old `Make/options` with the Intel Fortran
-  runtime; use the ones in this repository (gfortran).
-- **ParaView does not open from a terminal** — `nohup paraview > /dev/null 2>&1 < /dev/null &`.
-
-## License
-
-GPL-3.0-or-later (as OpenFOAM).
+GPL-3.0-or-later, as OpenFOAM.

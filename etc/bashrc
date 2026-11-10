@@ -51,3 +51,9 @@ else
 fi
 
 unset -f _oflsa_find_libdir
+
+# helper scripts (setRe, makeCavityMesh.py, ...) on PATH
+case ":$PATH:" in
+    *":$OFLSA_DIR/scripts:"*) ;;
+    *) export PATH="$OFLSA_DIR/scripts:$PATH" ;;
+esac
