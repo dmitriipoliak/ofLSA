@@ -1,0 +1,4 @@
+#!/bin/sh
+cd "$(dirname "$0")" || exit 1
+rm -rf processor* log.* case.foam constant/polyMesh
+foamListTimes -rm 2>/dev/null || true

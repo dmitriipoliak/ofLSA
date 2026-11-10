@@ -255,6 +255,12 @@ mpirun -np 32 apptainer exec ~/oflsa.sif oflsa-run StabilitySolver -parallel
 
 ---
 
+## Как воспроизвести статью
+
+В `tutorials/paper/` лежат два кейса из статьи на сетке 256³ (обычная и диагональная каверна)
+с теми же Re, сеткой и сдвигом. Им нужен кластер; подробности в
+[tutorials/paper/README.md](tutorials/paper/README.md).
+
 ## 10. Что где лежит
 
 | Путь | Что это |
@@ -262,7 +268,8 @@ mpirun -np 32 apptainer exec ~/oflsa.sif oflsa-run StabilitySolver -parallel
 | `src/matrixFreeFGMRESSafe` | итерационный линейный солвер (FGMRES) без сборки матриц |
 | `applications/solvers/NewtonSolver` | стационарное течение методом Ньютона |
 | `applications/solvers/StabilitySolver` | собственные числа и моды (PARPACK, shift-invert) |
-| `tutorials/lidDrivenCavity3D` | пример |
+| `tutorials/lidDrivenCavity3D` | пример (50³, быстрая проверка) |
+| `tutorials/paper` | два кейса 256³ из статьи |
 | `scripts/oflsa-shell` | открывает терминал, где всё подключено |
 | `scripts/setRe` | меняет Re в обоих файлах настроек |
 | `scripts/makeCavityMesh.py` | генерирует сетку каверны |

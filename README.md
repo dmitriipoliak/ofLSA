@@ -259,6 +259,12 @@ will differ somewhat.
 
 ---
 
+## Reproducing the paper
+
+`tutorials/paper/` contains the two 256³ cases of the paper (straight and diagonally driven
+cavity) with the paper's Re, grid and shift. They need a cluster; see
+[tutorials/paper/README.md](tutorials/paper/README.md).
+
 ## 10. Repository layout
 
 | Path | What it is |
@@ -266,7 +272,8 @@ will differ somewhat.
 | `src/matrixFreeFGMRESSafe` | iterative linear solver (FGMRES) without assembled matrices |
 | `applications/solvers/NewtonSolver` | steady flow by Newton's method |
 | `applications/solvers/StabilitySolver` | eigenvalues and eigenmodes (PARPACK, shift-invert) |
-| `tutorials/lidDrivenCavity3D` | the example |
+| `tutorials/lidDrivenCavity3D` | the example (50³, quick check) |
+| `tutorials/paper` | the two 256³ cases of the paper |
 | `scripts/oflsa-shell` | opens a terminal with everything loaded |
 | `scripts/setRe` | sets Re in both settings files |
 | `scripts/makeCavityMesh.py` | generates the cavity grid |

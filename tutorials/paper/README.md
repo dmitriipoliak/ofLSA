@@ -1,0 +1,35 @@
+# Cases from the paper
+
+Ready-to-run setups that reproduce Tables 1 and 2 of
+
+> Y. Feldman et al., *Massively parallel matrix-free 3D global linear stability analysis of
+> incompressible flows in OpenFOAM*.
+
+| Case | Lid | Re | Shift σ | Paper result |
+|---|---|---|---|---|
+| `straightCavity256` | along x, \|U\| = 1 | 1928.75 | 0.584 i | λ = −2.81·10⁻⁶ + 0.584058 i |
+| `diagonalCavity256` | along the horizontal diagonal, \|U\| = 1 | 2320.8 | 0.251 i | ω = 0.2507, near neutral |
+
+Both use the 256³ grid with wall clustering `x = ξ − 0.0975 sin(2πξ)` in all directions
+(Gelfgat, TCFD 2019), γ = 0.02 in the mAL preconditioner.
+
+**These are cluster runs.** 16.7 M cells; the paper used 256 cores: Newton up to ~2 h,
+shift-invert Arnoldi 14–30 h. Run on a node or through the scheduler, e.g.
+
+```bash
+./Allrun -np 256
+```
+
+`Allrun` reaches the target Re by continuation (200, 500, 1000, then every 250), halving the
+step if Newton does not converge. Each Newton step on this grid is expensive, so if you already
+have a converged base flow at a nearby Re, copy it into the case and start from it instead:
+
+```bash
+./Allrun -np 256 -continue -from <Re of that flow>
+```
+
+To try the same physics on a workstation, coarsen the grid inside the case:
+`makeCavityMesh.py 100 0.0975` (1 M cells). Results then differ from the paper by the grid error.
+
+**To be confirmed with the authors before release:** the exact shift σ and Arnoldi settings
+used for the paper runs, and the lid velocity of the diagonal case (here (1/√2, 1/√2, 0)).
