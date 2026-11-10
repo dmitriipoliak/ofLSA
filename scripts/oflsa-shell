@@ -14,7 +14,11 @@ OFLSA_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
 RCFILE="$(mktemp)"
 cat > "$RCFILE" <<EOF
-source "$FOAM_BASHRC" < /dev/null > /dev/null 2>&1
+# OpenFOAM runs "paraview --version" while loading; on some desktops that hangs.
+# Skip the ParaView detection and hide the display while sourcing.
+_oflsa_display="\$DISPLAY"; unset DISPLAY
+source "$FOAM_BASHRC" ParaView_TYPE=none < /dev/null > /dev/null 2>&1
+[ -n "\$_oflsa_display" ] && export DISPLAY="\$_oflsa_display"; unset _oflsa_display
 source "$OFLSA_DIR/etc/bashrc"
 PS1="(ofLSA) \w\$ "
 rm -f "$RCFILE"
