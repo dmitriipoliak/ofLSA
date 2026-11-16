@@ -34,6 +34,8 @@ jobs:
           . etc/bashrc
           cd tutorials/lidDrivenCavity3D
           foamDictionary system/decomposeParDict -entry numberOfSubdomains -set 2
+          # Re=200 converges from rest; the full Re ramp is Allrun's job, too long for CI
+          setRe 200
           blockMesh > log.blockMesh
           decomposePar -force > log.decomposePar
           mpirun -np 2 --oversubscribe NewtonSolver -parallel | tee log.NewtonSolver
