@@ -233,7 +233,7 @@ Re is in the file `lastConvergedRe`; continue from it without rebuilding the mes
 The container has OpenFOAM-14, PARPACK and the solvers inside. It needs Apptainer
 (Singularity), which most clusters have:
 ```bash
-apptainer pull oflsa.sif docker://ghcr.io/<owner>/<repo>:latest
+apptainer pull oflsa.sif docker://ghcr.io/dmitriipoliak/oflsa:latest
 cd ~/myCavity
 apptainer exec ~/oflsa.sif oflsa-run blockMesh
 apptainer exec ~/oflsa.sif oflsa-run decomposePar
