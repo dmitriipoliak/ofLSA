@@ -1,7 +1,5 @@
 # ofLSA — global linear stability analysis of 3D flows in OpenFOAM
 
-*Русская версия: [README.ru.md](README.ru.md)*
-
 This repository answers one question about a flow: **at what Reynolds number does a steady
 flow stop being steady, and what does the disturbance that grows look like?**
 
