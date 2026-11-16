@@ -72,7 +72,7 @@ On a cluster without root: use the cluster's OpenFOAM-14 module, or the containe
 ## 3. First run, step by step
 
 ```bash
-git clone https://github.com/<owner>/<repo>.git ofLSA
+git clone https://github.com/dmitriipoliak/ofLSA.git
 cd ofLSA
 ```
 
@@ -126,7 +126,7 @@ Expect minutes for the Newton part and longer for the stability part, depending 
 NewtonSolver at Re = 1000 ...
 Newton 6: momentum=3.1e-08 continuity=2.2e-12
 ```
-Small numbers = converged.
+Small numbers = converged. The full Newton output for each Re is in `log.NewtonSolver.Re<Re>`.
 
 **The answer** — at the end of `log.Allrun` (or `log.StabilitySolver`):
 ```
@@ -255,9 +255,7 @@ container — ask your cluster support which module to load.
 On the 256³ grid. The 50³ example is coarse — it checks that everything works, the numbers
 will differ somewhat.
 
----
-
-## Reproducing the paper
+### Reproducing the paper
 
 `tutorials/paper/` contains the two 256³ cases of the paper (straight and diagonally driven
 cavity) with the paper's Re, grid and shift. They need a cluster; see
